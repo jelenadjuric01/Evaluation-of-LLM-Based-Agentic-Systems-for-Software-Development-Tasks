@@ -1,7 +1,7 @@
 ﻿Model configuration;pass@1;;"Note: The parameters mention in model configuration are the ones that were changed
 and differ from the default configuration, if not named, parameter has the default value 
 max new tokens = 1024 and repetition penalty = 1,05";;;;;;;
-Deterministic (default);0,384;;;;;;;;;
-Temp 0,3, top p 0,9;0,378;;;;;;;;;
-Temp 0,5, top p 0,9;0,421;;;;;;;;;
-Beams 3;0,348;;;;;;;;;
+Deterministic (default);;;;;;;;;;
+Temp 0,3, top p 0,9;;;;;;;;;;
+Temp 0,5, top p 0,9;;;;;;;;;;
+Beams 3;;;;;;;;;;

@@ -115,7 +115,7 @@ def main():
     # Benchmark settings
     ap.add_argument("--sample", type=int, default=None, help="Sample N tasks (optional).")
     ap.add_argument("--seed", type=int, default=42, help="Random seed")
-    ap.add_argument("--max_steps", type=int, default=4, help="Max repair attempts per task")
+    ap.add_argument("--max_steps", type=int, default=1, help="Max repair attempts per task")
     ap.add_argument("--timeout", type=int, default=10, help="Timeout per test execution")
     ap.add_argument("--report", type=str, default="out/report.json", help="Output report path")
     
