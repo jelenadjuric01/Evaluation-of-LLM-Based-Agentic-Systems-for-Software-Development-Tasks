@@ -343,8 +343,8 @@ With temperature and top_p optimized, I explored whether adjusting repetition pe
 - Rationale: Reduce penalty to allow more natural code repetition patterns (loops, similar variable names, etc.)
 - Result: Notable performance drop, suggesting that some repetition penalty is necessary to avoid degenerate outputs
 
-**Temperature 0.2, top_p 0.9, repetition_penalty 1.03**: **pass@1 = 0.299** (-0.6% vs baseline, -1.8% vs best)
-- Rationale: Test moderate reduction in penalty to balance repetition control with code pattern flexibility
+**Temperature 0.2, top_p 0.9, repetition_penalty 1.03 & 1.07**: **pass@1 = 0.299** (-0.6% vs baseline, -1.8% vs best)
+- Rationale: Test moderate reduction/enlargment in penalty to balance repetition control with code pattern flexibility
 - Result: Better than 1.02 but still inferior to default 1.05, confirming that the default penalty is well-calibrated
 
 ### Key Insights and Conclusions
@@ -374,8 +374,25 @@ Based on these comprehensive experiments, the **optimal configuration** for Agen
 
 This configuration provides a 3.9% relative improvement over the deterministic baseline while proving robust against parameter variations, making it the most reliable choice for automated bug fixing systems.
 
-*Note: All experiments used the same model (Qwen2.5-Coder-1.5B-Instruct) with default values for max_new_tokens (1024) and repetition_penalty (1.05) unless otherwise specified.*
+### Future Optimization Directions
 
+Having reached apparent saturation in hyperparameter optimization around the current configuration, several promising avenues remain for further performance improvements:
+
+**Advanced Parameter Exploration**: More granular parameter sweeps could reveal micro-optimizations, such as testing temperature values between 0.18-0.22 in 0.01 increments, exploring top_k sampling in combination with the optimal temperature/top_p settings, or investigating dynamic temperature scheduling that starts higher and decreases during generation.
+
+**Prompt Engineering Refinement**: The current prompt structure could be enhanced through techniques like few-shot learning (providing 2-3 examples of successful bug fixes), more specific constraint language that better guides the model toward minimal patches, or adaptive prompting that adjusts based on bug complexity or failure patterns.
+
+**Model Architecture Exploration**: Testing larger models from the same family (Qwen2.5-Coder-7B, 14B) could provide significant improvements, while comparing against other code-specialized models (CodeT5, StarCoder, Code Llama) might reveal architecture-specific advantages for bug fixing tasks.
+
+**Fine-tuning and Specialization**: Custom fine-tuning on HumanEvalFix training data or similar bug-fixing datasets could create a model specifically optimized for this task. Additionally, parameter-efficient fine-tuning methods (LoRA, QLoRA) could adapt the model to bug-fixing patterns without full retraining costs.
+
+**Multi-step Strategy Optimization**: While current experiments focus on pass@1, exploring multi-step approaches with the optimal parameters (pass@2, pass@3) could reveal whether the configuration performs better with iterative refinement, and whether different parameters are optimal for subsequent repair attempts.
+
+**Context and Memory Enhancements**: Implementing more sophisticated failure analysis, maintaining context across repair attempts, or incorporating static analysis tools could provide richer input for the generation process, potentially breaking through the current performance ceiling.
+
+These directions represent natural next steps once hyperparameter optimization has been exhausted, focusing on more fundamental changes to the model, training, or system architecture.
+
+*Note: All experiments used the same model (Qwen2.5-Coder-1.5B-Instruct) with default values for max_new_tokens (1024) and repetition_penalty (1.05) unless otherwise specified.*
 
 
 **Note**: This is a research prototype. Generated patches should be carefully reviewed before production use.
