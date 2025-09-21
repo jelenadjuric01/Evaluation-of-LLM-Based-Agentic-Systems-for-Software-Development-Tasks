@@ -13,14 +13,14 @@ from __future__ import annotations
 import ast
 import re
 from typing import List, Dict, Optional, Tuple
-
+import os
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 # ===== Model config =====
 MODEL_ID = "Qwen/Qwen2.5-Coder-1.5B-Instruct"  # Transformers checkpoint
-DEVICE = "cpu"                                  # keep CPU for local dev
-DTYPE = torch.float32                           # CPU dtype
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DTYPE  = torch.float16 if DEVICE == "cuda" else torch.float32    # T4 supports FP16
 MAX_NEW_TOKENS = 1024                           # enough to re-emit function
 REPETITION_PENALTY = 1.05                       # mild anti-repeat
 SEED = 42                                       # reproducible
@@ -147,6 +147,7 @@ def generate_patch(
     ]
     prompt = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     inputs = tok(prompt, return_tensors="pt")
+    inputs = {k: v.to(_model.device) for k, v in inputs.items()}
 
     with torch.no_grad():
         outputs = model.generate(
