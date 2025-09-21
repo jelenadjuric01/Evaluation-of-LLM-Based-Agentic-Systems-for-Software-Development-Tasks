@@ -1,54 +1,36 @@
-# src/agent/policy.py
-"""
-Policy for generating minimal Python bug fixes using Transformers (CPU).
-- Deterministic (greedy) decoding for reproducibility.
-- Robust extraction of a single function from LLM output.
-- Safe fallback to buggy code if parsing/extraction fails.
-
-If you see a NumPy warning from PyTorch (NumPy 2.x vs Torch built on 1.x),
-either `pip install "numpy<2.0"` or upgrade Torch to a NumPy-2-compatible build.
-"""
-
+# --- in src/agent/policy.py ---
 from __future__ import annotations
-import ast
-import re
+import os, ast, re
 from typing import List, Dict, Optional, Tuple
-import os
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 # ===== Model config =====
-MODEL_ID = "Qwen/Qwen2.5-Coder-1.5B-Instruct"  # Transformers checkpoint
+MODEL_ID = os.getenv("MODEL_DIR", "Qwen/Qwen2.5-Coder-1.5B-Instruct")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-DTYPE  = torch.float16 if DEVICE == "cuda" else torch.float32    # T4 supports FP16
-MAX_NEW_TOKENS = 1024                           # enough to re-emit function
-REPETITION_PENALTY = 1.05                       # mild anti-repeat
-SEED = 42                                       # reproducible
+DTYPE  = torch.float16 if DEVICE == "cuda" else torch.float32
+MAX_NEW_TOKENS = 1024
+REPETITION_PENALTY = 1.05
+SEED = 42
 
-# ===== Prompt config =====
 SYSTEM = (
     "You are a careful Python bug fixer. Produce the MINIMAL patch. "
     "Keep the same function signature and behavior unless tests require otherwise. "
     "Avoid I/O, networking, and randomness."
 )
 
-# Cached model/tokenizer
 _tokenizer: Optional[AutoTokenizer] = None
 _model: Optional[AutoModelForCausalLM] = None
-
 
 def _seed_everything(seed: int = SEED) -> None:
     try:
         import random, numpy as np
-        random.seed(seed)
-        np.random.seed(seed)
+        random.seed(seed); np.random.seed(seed)
     except Exception:
         pass
     torch.manual_seed(seed)
 
-
 def load_llm() -> Tuple[AutoTokenizer, AutoModelForCausalLM]:
-    """Load and cache tokenizer/model on CPU with correct pad token."""
     global _tokenizer, _model
     if _model is None or _tokenizer is None:
         _seed_everything(SEED)
@@ -58,11 +40,37 @@ def load_llm() -> Tuple[AutoTokenizer, AutoModelForCausalLM]:
             torch_dtype=DTYPE,
             device_map=DEVICE,
         )
-        # Ensure pad token is set to eos if missing (prevents warnings)
+        # ensure pad token is set
         if _model.config.pad_token_id is None and _tokenizer.eos_token_id is not None:
             _model.config.pad_token_id = _tokenizer.eos_token_id
+        # neutralize any sampling defaults in generation_config (avoid warnings)
+        gc = _model.generation_config
+        gc.do_sample = False; gc.temperature = None; gc.top_p = None; gc.top_k = None
+        if hasattr(gc, "typical_p"): gc.typical_p = None
+        if hasattr(gc, "penalty_alpha"): gc.penalty_alpha = None
     return _tokenizer, _model
 
+def _build_user_prompt(buggy_code: str, failure_summary: str, func_name: Optional[str]) -> str:
+    name_rule = f"`{func_name}`" if func_name else "the same name as in the buggy code"
+    return (
+        "You will receive a buggy Python function and a failure summary from executing tests.\n"
+        "GOAL: Produce a MINIMAL patch that makes the tests pass.\n\n"
+        "Rules:\n"
+        f"- Output EXACTLY ONE Python function named {name_rule} with the SAME SIGNATURE as in the buggy code.\n"
+        "- Do NOT add helper functions, classes, imports, prints, logging, annotations, or comments.\n"
+        "- Do NOT change parameter names/order or the public API; preserve return TYPE and SHAPE.\n"
+        "- Prefer fixing a small detail (bounds, off-by-one, initial toggle) over refactoring.\n"
+        "- Infer the intended behavior from the failing assertion(s). Mentally verify on the shown inputs.\n"
+        "- For well-known names (e.g., fib), assume canonical definitions unless tests indicate otherwise.\n"
+        "- No I/O, no networking, no randomness.\n"
+        "- Output ONLY raw Python source (no Markdown/backticks/prose).\n\n"
+        "### Buggy function:\n"
+        f"{buggy_code}\n\n"
+        "### Failure summary (may be empty):\n"
+        f"{failure_summary}\n\n"
+        "### Output:\n"
+        "Start with `def ` and emit only the corrected function."
+    )
 
 def _extract_function(text: str, func_name: Optional[str] = None) -> str:
     """
@@ -109,72 +117,52 @@ def _is_valid_python(src: str) -> bool:
         return True
     except SyntaxError:
         return False
-def _build_user_prompt(buggy_code: str, failure_summary: str, func_name: str | None) -> str:
-    name_rule = f"`{func_name}`" if func_name else "the same name as in the buggy code"
-    return (
-        "You will receive a buggy Python function and a failure summary from executing tests.\n"
-        "GOAL: Produce a MINIMAL patch that makes the tests pass.\n\n"
-        "Rules:\n"
-        f"- Output EXACTLY ONE Python function named {name_rule} with the SAME SIGNATURE as in the buggy code.\n"
-        "- Do NOT add helper functions, classes, imports, prints, logging, annotations, or comments.\n"
-        "- Do NOT change parameter names/order or the public API; preserve return TYPE and SHAPE (e.g., list vs scalar).\n"
-        "- Prefer fixing a small detail (bounds, off-by-one, initial toggle) over refactoring.\n"
-        "- Infer the intended behavior from the failing assertion(s). Mentally verify on the inputs shown.\n"
-        "- For well-known names (e.g., fib), assume canonical definitions unless tests indicate otherwise.\n"
-        "- No I/O, no networking, no randomness.\n"
-        "- Output ONLY raw Python source (no Markdown/backticks/prose).\n\n"
-        "### Buggy function:\n"
-        f"{buggy_code}\n\n"
-        "### Failure summary (may be empty):\n"
-        f"{failure_summary}\n\n"
-        "### Output:\n"
-        "Start with `def ` and emit only the corrected function."
-    )
-
-
 def generate_patch(
     buggy_code: str,
     failure_summary: str = "",
     func_name: Optional[str] = None,
+    gen_cfg: Optional[dict] = None,
 ) -> str:
     """
-    Generate ONLY the corrected function source (no fences, no prose).
-    If extraction or parsing fails, return `buggy_code` so imports don't error.
+    Return ONLY the corrected function source (no fences, no prose).
+    gen_cfg: {do_sample: bool, temperature, top_p, top_k, max_new_tokens}
     """
+    gen_cfg = gen_cfg or {}
     tok, model = load_llm()
 
     user = _build_user_prompt(buggy_code, failure_summary, func_name)
-
-
     messages: List[Dict[str, str]] = [
         {"role": "system", "content": SYSTEM},
         {"role": "user", "content": user},
     ]
     prompt = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+
     inputs = tok(prompt, return_tensors="pt")
-    inputs = {k: v.to(_model.device) for k, v in inputs.items()}
+    # move to device (GPU on Kaggle)
+    inputs = {k: v.to(model.device) for k, v in inputs.items()}
+
+    do_sample = bool(gen_cfg.get("do_sample", False))
+    gen_args = {
+        "max_new_tokens": gen_cfg.get("max_new_tokens", MAX_NEW_TOKENS),
+        "do_sample": do_sample,
+        "repetition_penalty": REPETITION_PENALTY,
+        "eos_token_id": tok.eos_token_id,
+        "pad_token_id": model.config.pad_token_id,
+    }
+    if do_sample:
+        if gen_cfg.get("temperature") is not None: gen_args["temperature"] = gen_cfg["temperature"]
+        if gen_cfg.get("top_p") is not None:       gen_args["top_p"] = gen_cfg["top_p"]
+        if gen_cfg.get("top_k") is not None:       gen_args["top_k"] = gen_cfg["top_k"]
 
     with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=MAX_NEW_TOKENS,
-            do_sample=False,
-            temperature=None,
-            top_p=None,
-            top_k=None,
-            repetition_penalty=REPETITION_PENALTY,
-            eos_token_id=tok.eos_token_id,
-            pad_token_id=model.config.pad_token_id,
-        )
+        outputs = model.generate(**inputs, **gen_args)
 
     gen_text = tok.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
     code = _extract_function(gen_text, func_name=func_name).strip()
-
-    # Final sanitization (remove any stray sentinels if they ever appear)
     code = "\n".join(ln for ln in code.splitlines() if ln.strip() not in {"__END_SENTINEL__", "X"}).strip()
 
-    # Validate and fallback if needed
     if not code.startswith("def ") or not _is_valid_python(code):
         return buggy_code.strip()
-
     return code
+
+
