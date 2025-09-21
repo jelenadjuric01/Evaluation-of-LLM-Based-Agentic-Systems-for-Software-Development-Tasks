@@ -1,0 +1,5 @@
+transformers==4.44.2
+accelerate==0.34.2
+torch==2.2.0        
+sentencepiece       
+pytest==8.3.2
