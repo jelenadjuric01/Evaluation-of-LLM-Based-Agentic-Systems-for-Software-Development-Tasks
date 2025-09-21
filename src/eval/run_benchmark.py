@@ -99,7 +99,7 @@ def create_config_from_args(args) -> ModelConfig:
             top_k=getattr(args, 'top_k', None),
             **config_kwargs
         )
-    elif hasattr(args, 'num_beams') and args.num_beams > 1:
+    elif hasattr(args, 'num_beams') and args.num_beams is not None and args.num_beams > 1:
         # If num_beams > 1, use beam search
         config_kwargs['num_beams'] = args.num_beams
         config_kwargs['early_stopping'] = True
