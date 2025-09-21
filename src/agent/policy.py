@@ -109,6 +109,27 @@ def _is_valid_python(src: str) -> bool:
         return True
     except SyntaxError:
         return False
+def _build_user_prompt(buggy_code: str, failure_summary: str, func_name: str | None) -> str:
+    name_rule = f"`{func_name}`" if func_name else "the same name as in the buggy code"
+    return (
+        "You will receive a buggy Python function and a failure summary from executing tests.\n"
+        "GOAL: Produce a MINIMAL patch that makes the tests pass.\n\n"
+        "Rules:\n"
+        f"- Output EXACTLY ONE Python function named {name_rule} with the SAME SIGNATURE as in the buggy code.\n"
+        "- Do NOT add helper functions, classes, imports, prints, logging, annotations, or comments.\n"
+        "- Do NOT change parameter names/order or the public API; preserve return TYPE and SHAPE (e.g., list vs scalar).\n"
+        "- Prefer fixing a small detail (bounds, off-by-one, initial toggle) over refactoring.\n"
+        "- Infer the intended behavior from the failing assertion(s). Mentally verify on the inputs shown.\n"
+        "- For well-known names (e.g., fib), assume canonical definitions unless tests indicate otherwise.\n"
+        "- No I/O, no networking, no randomness.\n"
+        "- Output ONLY raw Python source (no Markdown/backticks/prose).\n\n"
+        "### Buggy function:\n"
+        f"{buggy_code}\n\n"
+        "### Failure summary (may be empty):\n"
+        f"{failure_summary}\n\n"
+        "### Output:\n"
+        "Start with `def ` and emit only the corrected function."
+    )
 
 
 def generate_patch(
@@ -122,23 +143,7 @@ def generate_patch(
     """
     tok, model = load_llm()
 
-    user = (
-        "You will receive a buggy Python function and a short failure summary from executing tests.\n"
-        "GOAL: Produce a MINIMAL patch that makes the tests pass.\n\n"
-        "Rules:\n"
-        f"- Output EXACTLY ONE Python function named `{func_name or 'the same name as in the buggy code'}` "
-        "with the SAME SIGNATURE as in the buggy code.\n"
-        "- Do NOT add helper functions, classes, imports, prints, logging, or comments.\n"
-        "- Do NOT change the public API, parameter order/names, return types, or overall semantics beyond fixing the bug.\n"
-        "- No I/O, no networking, no randomness; keep the code deterministic.\n"
-        "- Output ONLY raw Python source (no Markdown fences/backticks, no prose before/after).\n\n"
-        "### Buggy function:\n"
-        f"{buggy_code}\n\n"
-        "### Failure summary (may be empty):\n"
-        f"{failure_summary}\n\n"
-        "### Output:\n"
-        "Start with `def ` and emit only the corrected function."
-    )
+    user = _build_user_prompt(buggy_code, failure_summary, func_name)
 
 
     messages: List[Dict[str, str]] = [
