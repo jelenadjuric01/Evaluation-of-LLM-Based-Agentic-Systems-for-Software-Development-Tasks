@@ -123,16 +123,23 @@ def generate_patch(
     tok, model = load_llm()
 
     user = (
-        "You will receive a buggy Python function and a short test-failure summary.\n"
-        "1) Think briefly to yourself.\n"
-        "2) OUTPUT ONLY the corrected function source. No explanations. No backticks.\n\n"
+        "You will receive a buggy Python function and a short failure summary from executing tests.\n"
+        "GOAL: Produce a MINIMAL patch that makes the tests pass.\n\n"
+        "Rules:\n"
+        f"- Output EXACTLY ONE Python function named `{func_name or 'the same name as in the buggy code'}` "
+        "with the SAME SIGNATURE as in the buggy code.\n"
+        "- Do NOT add helper functions, classes, imports, prints, logging, or comments.\n"
+        "- Do NOT change the public API, parameter order/names, return types, or overall semantics beyond fixing the bug.\n"
+        "- No I/O, no networking, no randomness; keep the code deterministic.\n"
+        "- Output ONLY raw Python source (no Markdown fences/backticks, no prose before/after).\n\n"
         "### Buggy function:\n"
         f"{buggy_code}\n\n"
-        "### Failures (may be empty):\n"
+        "### Failure summary (may be empty):\n"
         f"{failure_summary}\n\n"
         "### Output:\n"
-        "Return only the fixed function; keep the same name and signature."
+        "Start with `def ` and emit only the corrected function."
     )
+
 
     messages: List[Dict[str, str]] = [
         {"role": "system", "content": SYSTEM},

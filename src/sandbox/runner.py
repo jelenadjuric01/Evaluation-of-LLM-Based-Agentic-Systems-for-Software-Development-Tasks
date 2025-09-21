@@ -1,55 +1,56 @@
-import os, sys, tempfile, textwrap, subprocess, json, shutil, time, uuid
+# src/sandbox/runner.py
+import sys, tempfile, subprocess, shutil, time
 from pathlib import Path
 
-def run_python(candidate_code: str, tests: str, timeout_s: int = 5, mem_mb: int = 512):
+def run_python(candidate_code: str, tests: str, timeout_s: int = 5):
     """
-    Executes candidate_code + tests in an isolated temp dir and returns a dict:
-    {passed: bool, stdout: str, stderr: str, failures: str}
+    Execute candidate_code + HumanEvalPack test script directly with Python.
+    HumanEvalPack tests call check(entry_point) at module top-level (no pytest).
+    Returns {passed: bool, stdout, stderr, failures, duration_s}.
     """
     work = Path(tempfile.mkdtemp(prefix="agentfix_"))
     try:
-        # Write module under test
-        mod = work / "candidate.py"
-        mod.write_text(candidate_code, encoding="utf-8")
+        # Write candidate and tests
+        (work / "candidate.py").write_text(candidate_code, encoding="utf-8")
 
-        # Write tests (pytest-style minimal)
+        # Ensure the temp dir is importable for `from candidate import ...`
+        sys_path_line = f"import sys; sys.path.insert(0, r\"{work}\")\n"
         test_file = work / "test_candidate.py"
-        test_file.write_text(tests, encoding="utf-8")
+        test_file.write_text(sys_path_line + tests, encoding="utf-8")
 
-        # Runner script: run pytest with short output
-        runner = work / "run_tests.py"
-        runner.write_text(textwrap.dedent("""
-            import sys, pytest
-            sys.exit(pytest.main(["-q", "test_candidate.py", "--maxfail=1", "-q"]))
-        """).strip()+"\n", encoding="utf-8")
-
-        env = os.environ.copy()
-        # Basic isolation: no network signals here, but we don't import non-stdlib by default
-        # You can harden further by patching socket, resource limits, etc.
-
-        cmd = [sys.executable, "-I", "-B", str(runner)]
+        # Run the test script directly (no pytest)
+        cmd = [sys.executable, "-I", "-B", str(test_file)]
+        start = time.time()
         try:
-            # POSIX rlimits if available
-            preexec_fn = None
-            if hasattr(os, "setsid"):
-                preexec_fn = os.setsid
-            start = time.time()
             p = subprocess.run(
-                cmd, cwd=str(work), env=env,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True, timeout=timeout_s, preexec_fn=preexec_fn
+                cmd,
+                cwd=str(work),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=timeout_s,
             )
-            dur = time.time() - start
-            passed = (p.returncode == 0)
-            return {
-                "passed": passed,
-                "stdout": p.stdout,
-                "stderr": p.stderr,
-                "failures": "" if passed else (p.stdout + "\n" + p.stderr),
-                "duration_s": round(dur, 3),
-                "workdir": str(work),
-            }
         except subprocess.TimeoutExpired as e:
-            return {"passed": False, "stdout": e.stdout or "", "stderr": "TIMEOUT", "failures": "TIMEOUT"}
+            return {
+                "passed": False,
+                "stdout": (e.stdout or ""),
+                "stderr": "TIMEOUT",
+                "failures": "TIMEOUT",
+                "duration_s": round(time.time() - start, 3),
+            }
+
+        dur = time.time() - start
+        passed = (p.returncode == 0)
+        failures = ""
+        if not passed:
+            failures = ((p.stderr or "") + ("\n" + p.stdout if p.stdout else "")).strip()
+
+        return {
+            "passed": passed,
+            "stdout": p.stdout,
+            "stderr": p.stderr,
+            "failures": failures,
+            "duration_s": round(dur, 3),
+        }
     finally:
         shutil.rmtree(work, ignore_errors=True)
