@@ -133,7 +133,7 @@ The system supports three main generation strategies:
 
 The `results/` folder contains comprehensive evaluation data:
 
-- **Individual Reports**: JSON files named by configuration parameters (e.g., `deterministic_config.json`, `temp_0.7_top_p_0.9.json`)
+- **Individual Reports**: JSON files named by configuration parameters (e.g., `deterministic_config.json`, `temp_0.3_top_p_0.9.json`)
 - **Comparative Analysis**: `comparative_results.csv` aggregates key metrics across all experiments
 - **Full Traces**: Each report includes complete execution traces with intermediate attempts
 
@@ -191,30 +191,9 @@ python -m src.eval.run_benchmark --report results/deterministic.json
 python -m src.eval.run_benchmark --temperature 0.3 --top_p 0.9 --report results/sampling_t0.3.json
 ```
 
-```bash
-python -m src.eval.run_benchmark --temperature 0.5 --top_p 0.9 --report results/sampling_t0.5.json
-```
-
-```bash
-python -m src.eval.run_benchmark --temperature 0.1 --top_p 0.9 --report results/sampling_t0.1.json
-```
-
-```bash
-python -m src.eval.run_benchmark --temperature 0.2 --top_p 0.9 --report results/sampling_t0.2.json
-```
-
-
 #### Beam Search
 ```bash
 python -m src.eval.run_benchmark --num_beams 3 --report results/beam3.json
-```
-
-```bash
-python -m src.eval.run_benchmark --num_beams 5 --report results/beam5.json
-```
-
-```bash
-python -m src.eval.run_benchmark --num_beams 4 --report results/beam4.json
 ```
 
 ### Command-Line Parameters
@@ -226,7 +205,7 @@ python -m src.eval.run_benchmark --num_beams 4 --report results/beam4.json
 - `--timeout N`: Execution timeout in seconds (default: 10)
 - `--report PATH`: Output JSON report path (default: out/report.json)
 
-⚠️ **Evaluation Metric Note**: The system uses **pass@k** evaluation where k equals `max_steps`. With the default `max_steps=1`, results are reported as **pass@1**. If you change `max_steps` to a different value (e.g., 3), the metric becomes **pass@3**.
+**Evaluation Metric Note**: The system uses **pass@k** evaluation where k equals `max_steps`. With the default `max_steps=1`, results are reported as **pass@1**. If you change `max_steps` to a different value (e.g., 3), the metric becomes **pass@3**.
 
 #### Model Configuration
 - `--model_id MODEL`: Hugging Face model identifier (default: Qwen/Qwen2.5-Coder-1.5B-Instruct)
@@ -392,7 +371,3 @@ Having reached apparent saturation in hyperparameter optimization around the cur
 
 These directions represent natural next steps once hyperparameter optimization has been exhausted, focusing on more fundamental changes to the model, training, or system architecture.
 
-*Note: All experiments used the same model (Qwen2.5-Coder-1.5B-Instruct) with default values for max_new_tokens (1024) and repetition_penalty (1.05) unless otherwise specified.*
-
-
-**Note**: This is a research prototype. Generated patches should be carefully reviewed before production use.
