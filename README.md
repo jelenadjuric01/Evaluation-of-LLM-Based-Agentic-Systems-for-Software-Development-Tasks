@@ -79,9 +79,21 @@ My prompt design follows several key principles:
 
 ### System Prompt
 ```
-"You are a careful Python bug fixer. Produce the MINIMAL patch. 
-Keep the same function signature and behavior unless tests require otherwise. 
-Avoid I/O, networking, and randomness."
+"You will receive a buggy Python function and a short failure summary from executing tests.\n"
+        "GOAL: Produce a MINIMAL patch that makes the tests pass.\n\n"
+        "Rules:\n"
+        f"- Output EXACTLY ONE Python function named `{func_name or 'the same name as in the buggy code'}` "
+        "with the SAME SIGNATURE as in the buggy code.\n"
+        "- Do NOT add helper functions, classes, imports, prints, logging, or comments.\n"
+        "- Do NOT change the public API, parameter order/names, return types, or overall semantics beyond fixing the bug.\n"
+        "- No I/O, no networking, no randomness; keep the code deterministic.\n"
+        "- Output ONLY raw Python source (no Markdown fences/backticks, no prose before/after).\n\n"
+        "### Buggy function:\n"
+        f"{buggy_code}\n\n"
+        "### Failure summary (may be empty):\n"
+        f"{failure_summary}\n\n"
+        "### Output:\n"
+        "Start with `def ` and emit only the corrected function."
 ```
 
 ### User Prompt Structure
