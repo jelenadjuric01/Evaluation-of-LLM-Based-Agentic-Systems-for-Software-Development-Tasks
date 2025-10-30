@@ -214,7 +214,7 @@ python -m src.eval.run_benchmark --num_beams 3 --report results/beam3.json
 - `--repetition_penalty FLOAT`: Penalty for repetitive text (default: 1.05)
 
 #### Generation Strategy (Mutually Exclusive)
-- `--temperature FLOAT`: Enable sampling with specified temperature (0.1-2.0)
+- `--temperature FLOAT`: Enable sampling with specified temperature (0.1-1.0)
 - `--num_beams N`: Enable beam search with N beams
 
 #### Sampling Parameters (Only with --temperature)
