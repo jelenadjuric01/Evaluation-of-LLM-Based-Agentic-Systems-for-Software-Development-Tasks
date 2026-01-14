@@ -43,6 +43,7 @@ Dependencies
 
 from __future__ import annotations
 import argparse, json, time
+import os
 from pathlib import Path
 from typing import Dict, Any, List
 
@@ -54,6 +55,7 @@ from src.agent.policy import (
     create_sampling_config,
 )
 from src.sandbox.runner import run_python
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 def _summarize_failures(fail_text: str, max_chars: int = 800) -> str:
@@ -332,8 +334,10 @@ def main():
         "repetition_penalty": config.repetition_penalty,
     }
 
-    Path("out").mkdir(parents=True, exist_ok=True)
-    Path(args.report).write_text(
+    report_path = Path(args.report)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+
+    report_path.write_text(
         json.dumps({
             "pass_at_1": pass_at_1,
             "passed": passed,
